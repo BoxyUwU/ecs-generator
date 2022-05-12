@@ -68,7 +68,7 @@ impl EmptyArchetypeMaker {
 
 #[derive(Debug, Copy, Clone)]
 pub struct WorldConstructArgs {
-    pub archetype_fragmentation: f64,
+    pub matched_archetype_count: u32,
     // FIXME: archetype_distribution
     pub archetype_count: u32,
 
@@ -80,9 +80,11 @@ pub struct WorldConstructArgs {
 pub struct Data(u64);
 
 pub fn construct_world(args: WorldConstructArgs, seed: u64) -> World {
-    println!("args: {:?}\nseed: {seed}", &args);
+    // println!("args: {:?}\nseed: {seed}", &args);
 
-    assert!(args.archetype_fragmentation >= 0.0 && args.archetype_fragmentation <= 1.0);
+    assert!(args.matched_archetype_count > 0);
+    assert!(args.archetype_count > 0);
+    assert!(args.matched_archetype_count <= args.archetype_count);
     assert!(args.entity_count > 0);
 
     let mut rng = SmallRng::seed_from_u64(seed);
@@ -91,10 +93,8 @@ pub fn construct_world(args: WorldConstructArgs, seed: u64) -> World {
     let mut data_archetype_maker = EmptyArchetypeMaker::new();
 
     let mut mock_archetypes = vec![false; args.archetype_count as usize];
-    let matching_archetypes =
-        (args.archetype_fragmentation * args.archetype_count as f64).ceil() as u32;
-    let mut remaining_to_match_archetypes = matching_archetypes;
 
+    let mut remaining_to_match_archetypes = args.matched_archetype_count;
     while remaining_to_match_archetypes > 0 {
         let picked = &mut mock_archetypes[rng.gen_range(0..args.archetype_count as usize)];
         match picked {
@@ -106,7 +106,7 @@ pub fn construct_world(args: WorldConstructArgs, seed: u64) -> World {
         }
     }
 
-    let mut leftover_entities = args.entity_count % matching_archetypes;
+    let mut leftover_entities = args.entity_count % args.matched_archetype_count;
     for (_, matches) in mock_archetypes.into_iter().enumerate() {
         // println!("archetype: {i}");
         match matches {
@@ -123,7 +123,7 @@ pub fn construct_world(args: WorldConstructArgs, seed: u64) -> World {
                 let e = data_archetype_maker.entity_in_current_archetype(&mut world, (Data(100),));
                 world.despawn(e);
 
-                for _ in 0..(args.entity_count / matching_archetypes) {
+                for _ in 0..(args.entity_count / args.matched_archetype_count) {
                     data_archetype_maker.entity_in_current_archetype(&mut world, (Data(100),));
                 }
 
