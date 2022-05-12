@@ -66,32 +66,49 @@ impl EmptyArchetypeMaker {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct WorldConstructArgs {
     pub archetype_fragmentation: f64,
     // FIXME: archetype_distribution
     pub archetype_count: u32,
 
     // FIXME: entity_distribution
-    pub entity_count_per_archetype_avg: u32,
+    pub entity_count: u32,
 }
 
 #[derive(Component)]
 pub struct Data(u64);
 
 pub fn construct_world(args: WorldConstructArgs, seed: u64) -> World {
-    // println!("seed: {seed}");
+    println!("args: {:?}\nseed: {seed}", &args);
+
     assert!(args.archetype_fragmentation >= 0.0 && args.archetype_fragmentation <= 1.0);
-    assert!(args.entity_count_per_archetype_avg > 0);
+    assert!(args.entity_count > 0);
 
     let mut rng = SmallRng::seed_from_u64(seed);
     let mut world = World::new();
     let mut null_archetype_maker = EmptyArchetypeMaker::new();
     let mut data_archetype_maker = EmptyArchetypeMaker::new();
 
-    for _ in 0..args.archetype_count {
+    let mut mock_archetypes = vec![false; args.archetype_count as usize];
+    let matching_archetypes =
+        (args.archetype_fragmentation * args.archetype_count as f64).ceil() as u32;
+    let mut remaining_to_match_archetypes = matching_archetypes;
+
+    while remaining_to_match_archetypes > 0 {
+        let picked = &mut mock_archetypes[rng.gen_range(0..args.archetype_count as usize)];
+        match picked {
+            true => continue,
+            false => {
+                *picked = true;
+                remaining_to_match_archetypes -= 1;
+            }
+        }
+    }
+
+    let mut leftover_entities = args.entity_count % matching_archetypes;
+    for (_, matches) in mock_archetypes.into_iter().enumerate() {
         // println!("archetype: {i}");
-        let matches = rng.gen_bool(args.archetype_fragmentation);
         match matches {
             false => {
                 // println!("doesnt match");
@@ -102,9 +119,19 @@ pub fn construct_world(args: WorldConstructArgs, seed: u64) -> World {
                 // println!("matches");
                 // println!("data_archetype_maker:{}", data_archetype_maker.0);
 
-                for _ in 0..args.entity_count_per_archetype_avg {
+                // make sure the archetype is created even if no entities get spawned into it
+                let e = data_archetype_maker.entity_in_current_archetype(&mut world, (Data(100),));
+                world.despawn(e);
+
+                for _ in 0..(args.entity_count / matching_archetypes) {
                     data_archetype_maker.entity_in_current_archetype(&mut world, (Data(100),));
                 }
+
+                if let Some(_) = leftover_entities.checked_sub(1) {
+                    leftover_entities -= 1;
+                    data_archetype_maker.entity_in_current_archetype(&mut world, (Data(100),));
+                }
+
                 data_archetype_maker.advance_archetype();
             }
         }
@@ -112,6 +139,7 @@ pub fn construct_world(args: WorldConstructArgs, seed: u64) -> World {
 
     // + 2, because of the `[]` archetype and the resource archetype
     assert_eq!(args.archetype_count as usize + 2, world.archetypes().len());
+    assert_eq!(args.entity_count, world.entities().len());
 
     world
 }

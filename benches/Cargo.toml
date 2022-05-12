@@ -12,5 +12,5 @@ criterion = { version = "0.3" }
 
 [[bench]]
 name = "test"
-path = "benches/mod.rs"
+path = "benches/lib.rs"
 harness = false
